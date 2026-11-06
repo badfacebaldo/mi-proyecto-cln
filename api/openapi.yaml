@@ -1,0 +1,55 @@
+```yaml
+openapi: 3.0.3
+info:
+  title: API PetMarket - Componentes de Lógica de Negocio
+  version: 1.0.0
+  description: Especificación REST para pedidos, cancelaciones y división de envíos en PetMarket.
+paths:
+  /api/v1/orders:
+    post:
+      summary: Crear pedido (RN-04, RN-05, RN-07, RN-09)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, clienteId, items, montoTotal]
+              properties:
+                id: { type: string, example: "PED-1001" }
+                clienteId: { type: string, example: "CLI-500" }
+                montoTotal: { type: number, example: 1250.50 }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      sku: { type: string, example: "ALIM-DOG-01" }
+                      cantidad: { type: integer, example: 2 }
+                      precioUnitario: { type: number, example: 625.25 }
+      responses:
+        '201':
+          description: Pedido procesado exitosamente.
+
+  /api/v1/orders/{id}/cancel:
+    post:
+      summary: Cancelar pedido evaluando permisos (RN-11 a RN-13)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rol, motivo]
+              properties:
+                rol: { type: string, enum: [CLIENTE, AGENTE_ATENCION, SUPERVISOR_ATENCION] }
+                motivo: { type: string, example: "Dirección incorrecta" }
+      responses:
+        '200':
+          description: Cancelación exitosa.
+```

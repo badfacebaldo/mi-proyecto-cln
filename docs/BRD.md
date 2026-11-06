@@ -1,16 +1,38 @@
 # Business Requirements Document (BRD) - PetMarket
 
-## 1. Resumen Ejecutivo y Problemas
-PetMarket busca reducir la discrepancia de inventario de ~15% a <2%, disminuir un 60% las llamadas de "¿dónde está mi pedido?" y automatizar el 70% de cancelaciones/devoluciones dentro de política.
+## 1. Introducción y Contexto del Negocio
+PetMarket es un negocio de comercio electrónico que comercializa comestibles, complementos y artículos para mascotas, operando con dos depósitos (almacenes) y distintas modalidades de entrega[cite: 10]. El proceso abarca desde la confirmación del pago hasta la entrega final, pasando por la preparación, empaque, despacho, cancelaciones y devoluciones[cite: 10].
 
-## 2. Reglas de Negocio Principales (RN)
-- **RN-01 a RN-03**: El proceso inicia tras confirmar pago y cierra 5 días hábiles después de "Entregado".
-- **RN-04**: Reserva de inventario de 15 minutos en checkout.
-- **RN-05**: Revalidación obligatoria de stock antes de procesar cobro.
-- **RN-06**: Opciones ante producto agotado (eliminar, esperar restock, sustituir con confirmación explícita).
-- **RN-07**: Límite estricto de 50 unidades por SKU por pedido.
-- **RN-08**: Máximo 3 intentos de pago en 15 minutos.
-- **RN-09**: Pedidos > $15,000 MXN pasan automáticamente a revisión antifraude manual (máximo 24h).
-- **RN-11 a RN-13**: Cancelación libre <2h; asistida por agente antes de "En tránsito"; excepción por supervisor si está "En tránsito".
-- **RN-14 a RN-16**: Asignación automática por cercanía y carga. División automática en sub-envíos si ningún almacén cubre 100%.
-- **RN-20 a RN-21**: Devolución estándar en 5 días hábiles con producto sin usar. Devoluciones excepcionales requieren evidencia fotográfica y aprobación del Supervisor.
+## 2. Problemas Actuales y Oportunidades
+- **Discrepancia de inventario**: El inventario del sitio web difiere de la existencia física (~15%)[cite: 10].
+- **División de pedidos**: Complejidad en seguimiento cuando un pedido se surte desde dos almacenes[cite: 10].
+- **Falta de visibilidad**: Alto volumen de llamadas a soporte preguntando "¿dónde está mi pedido?"[cite: 10].
+- **Gestión manual**: Procesamiento manual de cancelaciones y devoluciones repetitivo[cite: 10].
+
+## 3. Objetivos del Proyecto (Medibles)
+1. **Inventario Confiable**: Reducir la discrepancia de inventario de ~15% a menos del 2%[cite: 11].
+2. **Autoservicio y Visibilidad**: Reducir en un 60% las llamadas a Atención al Cliente sobre el estatus de pedidos[cite: 11].
+3. **Automatización de Reglas**: Resolver al menos el 70% de cancelaciones/devoluciones dentro de política sin decisión manual caso por caso[cite: 11].
+
+## 4. Reglas de Negocio Confirmadas (RN-01 a RN-21)
+- **RN-01**: El carrito de compras representa intención de compra; no crea pedido ni reserva stock[cite: 15].
+- **RN-02**: Cierre exitoso del proceso tras quedar "Entregado" y transcurrir 5 días hábiles sin reclamo[cite: 15].
+- **RN-03**: Cierre por excepción al cancelar, rebasar reintentos de pago o procesar reembolso completo[cite: 15].
+- **RN-04**: El stock se reserva por 15 minutos al iniciar el checkout. Si no se confirma el pago, se libera automáticamente[cite: 15].
+- **RN-05**: El stock se revalida obligatoriamente inmediatamente antes de procesar el pago[cite: 15].
+- **RN-06**: Si un ítem se agota al revalidar, se ofrecen 3 opciones: eliminar ítem, esperar restock o sustituir (requiere confirmación explícita del cliente)[cite: 15].
+- **RN-07**: Límite estricto de 50 unidades por SKU por pedido para evitar reventas[cite: 15].
+- **RN-08**: Máximo 3 intentos de pago dentro de la ventana de 15 minutos[cite: 15].
+- **RN-09**: Pedidos mayores a $15,000 MXN pasan automáticamente a revisión antifraude manual (plazo hasta 24h)[cite: 15].
+- **RN-10**: Si vencen intentos o tiempo sin pago, pasa a "Cancelado por pago no confirmado" y libera reserva[cite: 16].
+- **RN-11**: El cliente puede cancelar libremente en la app dentro de 2 horas desde la confirmación de pago (si está en "Pago confirmado" o "En preparación")[cite: 16].
+- **RN-12**: Un Agente de Atención al Cliente puede cancelar en cualquier momento antes de "En tránsito", registrando motivo y destino del producto (inventario o merma)[cite: 16].
+- **RN-13**: Tras "En tránsito", no se permite cancelación estándar; requiere autorización del Supervisor de Atención al Cliente por excepción[cite: 16].
+- **RN-14**: Asignación automática de almacén por cercanía al domicilio y, en desempate, menor carga de pedidos pendientes[cite: 16].
+- **RN-15**: Incidencia de faltante físico es resuelta por el Supervisor de Almacén, pudiendo reasignar al otro almacén[cite: 16].
+- **RN-16**: División automática en sub-envíos con folios y guías independientes cuando ningún almacén cubre el 100% del stock. Sin flete extra. El pedido padre se marca "Entregado" solo cuando todos los sub-envíos son entregados[cite: 16].
+- **RN-17**: Paquetería realiza 2 intentos de entrega. Si fallan, el paquete regresa al almacén y Atención al Cliente contacta para reprogramar o reembolsar[cite: 16, 17].
+- **RN-18**: Reembolso automático si el cliente no responde en 5 días hábiles tras la doble entrega fallida[cite: 17].
+- **RN-19**: Rechazo del paquete en sitio se trata como devolución inmediata[cite: 17].
+- **RN-20**: Devolución estándar aplica en 5 días hábiles con producto sin usar[cite: 17].
+- **RN-21**: Devolución fuera de ventana, sin empaque o por daño exige evidencia fotográfica y aprobación exclusiva del Supervisor de Atención al Cliente[cite: 17].

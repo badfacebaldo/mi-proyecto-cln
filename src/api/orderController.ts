@@ -1,33 +1,29 @@
 import { Request, Response } from 'express';
-import { CreateOrderUseCase } from '../../application/use-cases/CreateOrderUseCase';
+import { OrderApplicationService } from '../application/orderApplicationService';
 
-/**
- * Controlador HTTP Express para la gestión de Pedidos.
- * Expone los endpoints definidos en openapi.yaml para la API REST de PetMarket.
- */
 export class OrderController {
-  constructor(private readonly createOrderUseCase: CreateOrderUseCase) {}
+  constructor(private readonly appService: OrderApplicationService) {}
 
-  /**
-   * Endpoint POST /v1/orders - Crea un nuevo pedido validando reglas de dominio.
-   */
-  public async createOrder(req: Request, res: Response): Promise<Response> {
+  public async create(req: Request, res: Response): Promise<Response> {
     const { customerId, items } = req.body;
-
-    const result = await this.createOrderUseCase.execute({
-      customerId,
-      items
-    });
+    const result = await this.appService.processOrderCreation(customerId, items);
 
     if (result.isFailure) {
-      return res.status(400).json({
-        error: result.error
-      });
+      return res.status(400).json({ error: result.error });
     }
 
-    return res.status(201).json({
-      message: 'Pedido creado exitosamente con validación de dominio',
-      data: result.getValue()
-    });
+    return res.status(201).json({ message: 'Pedido creado exitosamente', data: result.getValue() });
+  }
+
+  public async cancel(req: Request, res: Response): Promise<Response> {
+    const { orderId } = req.params;
+    const { role, reason } = req.body;
+
+    const result = await this.appService.transitionOrderStatus(orderId, 'CANCELADO', role, new Date());
+    if (result.isFailure) {
+      return res.status(403).json({ error: result.error });
+    }
+
+    return res.status(200).json({ message: 'Pedido cancelado correctamente' });
   }
 }

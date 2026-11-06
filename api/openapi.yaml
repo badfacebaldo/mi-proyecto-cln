@@ -1,55 +1,342 @@
+# Especificación OpenAPI 3.0.3 - PetMarket API
+
 ```yaml
 openapi: 3.0.3
 info:
-  title: API PetMarket - Componentes de Lógica de Negocio
+  title: PetMarket Order & Logistics API
+  description: >
+    API RESTful para la gestión del ciclo de vida de pedidos, reserva de inventario,
+    despacho multialmacén, control de entregas, cancelaciones y devoluciones.
+    Cumple con las reglas de negocio RN-01 a RN-21 del proyecto integrador PetMarket (FIME UANL).
   version: 1.0.0
-  description: Especificación REST para pedidos, cancelaciones y división de envíos en PetMarket.
+  contact:
+    name: Soporte Técnico PetMarket
+    email: soporte@petmarket.uanl.edu.mx
+
+servers:
+  - url: https://api.petmarket.com/v1
+    description: Servidor de Producción
+  - url: http://localhost:3000/v1
+    description: Entorno de Desarrollo Local
+
+tags:
+  - name: Carrito & Checkout
+    description: Operaciones de reserva temporal de inventario y revalidación de stock (RN-01, RN-04, RN-05, RN-07).
+  - name: Pagos & Transacciones
+    description: Confirmación de pago, reintentos y filtro de revisión antifraude (RN-08, RN-09, RN-10).
+  - name: Pedidos
+    description: Consulta de estatus, historial y administración general del pedido padre.
+  - name: Logística & Envíos
+    description: Asignación de almacenes, sub-envíos y control de guías (RN-14, RN-15, RN-16).
+  - name: Cancelaciones
+    description: Matriz de cancelaciones autónomas, asistidas y por excepción (RN-11, RN-12, RN-13).
+  - name: Entregas & Devoluciones
+    description: Registro de intentos, rechazo en sitio y solicitudes de devolución (RN-17 a RN-21).
+
 paths:
-  /api/v1/orders:
+  /checkout/reserve:
     post:
-      summary: Crear pedido (RN-04, RN-05, RN-07, RN-09)
+      tags:
+        - Carrito & Checkout
+      summary: Reservar inventario para checkout (RN-04, RN-07)
+      description: Bloquea las existencias por 15 minutos exactos. Valida límite de 50 unidades por SKU.
+      operationId: reserveStock
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [id, clienteId, items, montoTotal]
-              properties:
-                id: { type: string, example: "PED-1001" }
-                clienteId: { type: string, example: "CLI-500" }
-                montoTotal: { type: number, example: 1250.50 }
-                items:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      sku: { type: string, example: "ALIM-DOG-01" }
-                      cantidad: { type: integer, example: 2 }
-                      precioUnitario: { type: number, example: 625.25 }
+              $ref: '#/components/schemas/CheckoutReservationRequest'
       responses:
         '201':
-          description: Pedido procesado exitosamente.
+          description: Reserva realizada con éxito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutReservationResponse'
+        '400':
+          description: Exceso de límite por SKU (>50 unidades) o datos inválidos.
+        '409':
+          description: Stock insuficiente para uno o más productos.
 
-  /api/v1/orders/{id}/cancel:
+  /payments/process:
     post:
-      summary: Cancelar pedido evaluando permisos (RN-11 a RN-13)
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string }
+      tags:
+        - Pagos & Transacciones
+      summary: Procesar intento de pago (RN-05, RN-08, RN-09)
+      description: Revalida stock antes de cobrar, controla reintentos (max 3) y aplica filtro de revisión antifraude (> $15,000 MXN).
+      operationId: processPayment
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [rol, motivo]
-              properties:
-                rol: { type: string, enum: [CLIENTE, AGENTE_ATENCION, SUPERVISOR_ATENCION] }
-                motivo: { type: string, example: "Dirección incorrecta" }
+              $ref: '#/components/schemas/PaymentProcessingRequest'
       responses:
         '200':
-          description: Cancelación exitosa.
+          description: Pago procesado exitosamente o enviado a revisión antifraude.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentProcessingResponse'
+        '402':
+          description: Pago rechazado. Incrementa el contador de reintentos.
+        '409':
+          description: Stock agotado durante la revalidación pre-cobro (RN-05).
+
+  /orders/{orderId}:
+    get:
+      tags:
+        - Pedidos
+      summary: Consultar estatus integral del pedido (RN-19)
+      description: Retorna la información completa del pedido padre y sus sub-envíos asociados.
+      operationId: getOrderById
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Detalle del pedido encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetails'
+        '404':
+          description: Pedido no encontrado.
+
+  /orders/{orderId}/cancel:
+    post:
+      tags:
+        - Cancelaciones
+      summary: Solicitar cancelación de pedido (RN-11, RN-12, RN-13)
+      description: Aplica reglas de autocancelación (<=2h), cancelaciones por agente o excepciones aprobadas por supervisor.
+      operationId: cancelOrder
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancellationRequest'
+      responses:
+        '200':
+          description: Cancelación procesada y reembolso iniciado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancellationResponse'
+        '403':
+          description: Cancelación no autorizada (ej. pedido en tránsito sin rol de Supervisor).
+        '400':
+          description: Motivo inválido o fuera del plazo estipulado.
+
+  /returns:
+    post:
+      tags:
+        - Entregas & Devoluciones
+      summary: Solicitar devolución post-entrega (RN-20, RN-21)
+      description: Registra solicitudes de devolución estándar o por excepción (requiere evidencia fotográfica y aprobación de supervisor).
+      operationId: createReturn
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReturnRequest'
+      responses:
+        '201':
+          description: Solicitud de devolución registrada correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReturnResponse'
+        '400':
+          description: Plazo de 5 días hábiles expirado o falta de evidencia requerida.
+
+components:
+  schemas:
+    CheckoutReservationRequest:
+      type: object
+      required:
+        - customerId
+        - items
+      properties:
+        customerId:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+
+    OrderItem:
+      type: object
+      required:
+        - sku
+        - quantity
+      properties:
+        sku:
+          type: string
+          example: "ALIM-DOG-01"
+        quantity:
+          type: integer
+          maximum: 50
+          example: 2
+
+    CheckoutReservationResponse:
+      type: object
+      properties:
+        reservationId:
+          type: string
+          format: uuid
+        expiresAt:
+          type: string
+          format: date-time
+        reservedItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+
+    PaymentProcessingRequest:
+      type: object
+      required:
+        - reservationId
+        - paymentToken
+        - amount
+      properties:
+        reservationId:
+          type: string
+          format: uuid
+        paymentToken:
+          type: string
+        amount:
+          type: number
+          format: float
+          example: 1850.50
+
+    PaymentProcessingResponse:
+      type: object
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PAGO_CONFIRMADO, EN_REVISION_ANTIFRAUDE, RECHAZADO]
+        transactionId:
+          type: string
+        attemptsRemaining:
+          type: integer
+          example: 2
+
+    OrderDetails:
+      type: object
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDIENTE_PAGO, PAGO_CONFIRMADO, EN_REVISION_ANTIFRAUDE, EN_PREPARACION, EN_TRANSITO, ENTREGADO, CANCELADO]
+        totalAmount:
+          type: number
+        subOrders:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubOrderDetails'
+
+    SubOrderDetails:
+      type: object
+      properties:
+        subOrderId:
+          type: string
+          format: uuid
+        warehouseId:
+          type: string
+          enum: [ALMACEN_NORTE, ALMACEN_SUR]
+        trackingNumber:
+          type: string
+        status:
+          type: string
+        estimatedDelivery:
+          type: string
+          format: date
+
+    CancellationRequest:
+      type: object
+      required:
+        - requestedByRole
+        - reason
+      properties:
+        requestedByRole:
+          type: string
+          enum: [CLIENTE, AGENTE_ATENCION, SUPERVISOR_ATENCION]
+        reason:
+          type: string
+        supervisorApprovalToken:
+          type: string
+          description: Requerido solo si el pedido ya está EN_TRANSITO.
+
+    CancellationResponse:
+      type: object
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          example: "CANCELADO"
+        refundAmount:
+          type: number
+        inventoryRestocked:
+          type: boolean
+
+    ReturnRequest:
+      type: object
+      required:
+        - orderId
+        - sku
+        - requestedByRole
+        - condition
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        requestedByRole:
+          type: string
+          enum: [CLIENTE, AGENTE_ATENCION, SUPERVISOR_ATENCION]
+        condition:
+          type: string
+          enum: [NUEVO_SIN_USAR, DEFECTUOSO, DAÑADO_ENVIO, SIN_EMPAQUE]
+        evidencePhotoUrl:
+          type: string
+          format: uri
+
+    ReturnResponse:
+      type: object
+      properties:
+        returnId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [APROBADA, REQUIERE_REVISION_SUPERVISOR, RECHAZADA]
+        returnLabelUrl:
+          type: string
+          format: uri
 ```

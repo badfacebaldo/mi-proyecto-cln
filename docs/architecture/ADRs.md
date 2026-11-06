@@ -1,23 +1,41 @@
 # Architecture Decision Records (ADRs) - PetMarket
 
-## ADR-01: Seleccion del Patron de Logica de Negocio (Domain Model)
+Este documento registra las decisiones de arquitectura de software fundamentales tomadas durante el diseño del sistema transaccional de PetMarket.
+
+---
+
+## ADR-01: Selección del Patrón de Lógica de Negocio (Domain Model)
+
 - **Estado**: Aceptado
-- **Contexto**: PetMarket cuenta con 21 reglas de negocio entrelazadas, reservas de 15 minutos, revalidación pre-cobro, sub-envíos y matriz de permisos por roles.
-- **Alternativas**:
-  1. *Transaction Script*: Generaría duplicación masiva de código procedural y sobreventa de stock.
-  2. *Table Module*: Dificultaría la gestión del ciclo de vida del pedido y sus estados.
-  3. *Domain Model*: Encapsula estado y reglas en entidades ricas protegidas por invariantes.
-- **Decisión**: Adoptar **Domain Model** como patrón central para el dominio transaccional.
-- **Consecuencias**: Beneficios en mantenibilidad y aislamiento total de reglas (RN-01 a RN-21). Requiere mapeos limpios entre DTOs y agregados.
+- **Contexto**: PetMarket cuenta con 21 reglas de negocio entrelazadas, reservas de inventario temporales de 15 minutos, revalidación pre-cobro, sub-envíos multialmacén y una matriz de permisos jerárquicos por roles.
+- **Alternativas Evaluadas**:
+  1. *Transaction Script*: Generaría duplicación masiva de código procedural y acoplamiento directo entre controladores y base de datos, incrementando el riesgo de sobreventa de stock.
+  2. *Table Module*: Dificultaría la gestión del ciclo de vida complejo de los pedidos y sus reglas temporales.
+  3. *Domain Model*: Encapsula el estado y las reglas en entidades ricas protegidas por agregados e invariantes.
+- **Decisión**: Adoptar **Domain Model** como patrón central para la capa transaccional.
+- **Consecuencias**: 
+  - Aislamiento total de las reglas de negocio (RN-01 a RN-21) frente a detalles de infraestructura.
+  - Facilidad para realizar pruebas unitarias sobre las reglas del dominio sin depender de base de datos.
+  - Requiere mapeo explícito mediante DTOs para la comunicación externa.
+
+---
 
 ## ADR-02: Control Transaccional con Repositorios y Unit of Work
-- **Estado**: Aceptado
-- **Contexto**: Operaciones críticas como la confirmación del cobro y asignación de stock deben completarse bajo una transacción atómica "todo o nada".
-- **Decisión**: Definir interfaces de repositorio desacopladas en la capa de dominio y manejar la consistencia con el patrón **Unit of Work**.
-- **Consecuencias**: Previene discrepancias de inventario y estados inconsistentes ante fallos de red.
 
-## ADR-03: CQRS Basico con Separación de DTOs de Lectura
 - **Estado**: Aceptado
-- **Contexto**: Alto volumen de consultas de seguimiento por parte de clientes y tableros gerenciales que no deben sobrecargar los agregados de escritura.
-- **Decisión**: Implementar **CQRS Básico** (Commands para mutación de datos y Queries que retornan DTOs planos).
-- **Consecuencias**: Altas prestaciones en lecturas y desacoplamiento entre la interfaz gráfica y el dominio.
+- **Contexto**: Operaciones críticas como la confirmación del cobro y la reserva/descuento de existencias físicas deben ejecutarse bajo una transacción atómica del tipo "todo o nada".
+- **Decisión**: Definir interfaces de repositorio desacopladas en la capa de dominio y coordinar la consistencia de datos mediante el patrón **Unit of Work**.
+- **Consecuencias**:
+  - Evita inconsistencias entre existencias reservadas y cobros procesados ante fallos de red o base de datos.
+  - Permite sustituir la persistencia (ej. InMemory a PostgreSQL) sin alterar la capa de aplicación.
+
+---
+
+## ADR-03: CQRS Básico con DTOs Planos de Lectura
+
+- **Estado**: Aceptado
+- **Contexto**: Alto volumen de consultas de seguimiento por parte de clientes y tableros operativos gerenciales que no deben sobrecargar el modelo de agregados de escritura.
+- **Decisión**: Implementar **CQRS Básico**, separando los comandos de modificación (Commands gestionados por el servicio de aplicación) de las consultas de lectura (Queries que retornan DTOs planos).
+- **Consecuencias**:
+  - Maximiza el rendimiento en la consulta de estatus de pedidos y reportes de inventario.
+  - Mantiene las entidades del dominio enfocadas exclusivamente en la validación transaccional.
